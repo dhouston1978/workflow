@@ -1,0 +1,262 @@
+function createInstructorEmailDraft() {
+  // Updated spreadsheet ID
+  const spreadsheetId = "1BT5dLq2-lWbz50EKBAElK61C6BpqOuVTskQEJ7FzhEc";
+  const sheetName = "NWT";
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+
+  // Check if the spreadsheet was accessed successfully
+  if (!spreadsheet) {
+    Logger.log("Spreadsheet not found. Please check the spreadsheet ID.");
+    return;
+  }
+  
+  const sheet = spreadsheet.getSheetByName(sheetName);
+
+  // Check if the sheet was accessed successfully
+  if (!sheet) {
+    Logger.log("Sheet not found. Please check the sheet name.");
+    return;
+  }
+
+  const data = sheet.getDataRange().getValues(); // Get all data from the specified sheet
+  const headers = data[0]; // Assume the first row contains headers
+  const emailBody = []; // Store each opportunity's details
+
+  // Helper function to format the date as "Tue Nov 19 2024"
+  function formatDate(date) {
+    if (Object.prototype.toString.call(date) === '[object Date]' && !isNaN(date)) {
+      const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+      return date.toLocaleDateString('en-US', options);
+    } else if (typeof date === 'string' && Date.parse(date)) {
+      const parsedDate = new Date(date);
+      return parsedDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    } else {
+      return date; // If invalid date, just return it as-is (this can be refined further)
+    }
+  }
+
+  // Helper function to format currency with yen symbol, no decimals, and commas
+  function formatCurrency(amount) {
+    const roundedAmount = Math.round(Number(amount));
+    return '¥' + roundedAmount.toLocaleString('en-US');
+  }
+
+  // Helper function to create a clickable Google Maps link for addresses
+  function formatAddress(address) {
+    const formattedAddress = encodeURIComponent(address);
+    return `<a href="https://www.google.com/maps/search/?q=${formattedAddress}" target="_blank">${address}</a>`;
+  }
+
+  // Loop through the data rows
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const details = [];
+    const rowData = {};
+    headers.forEach((header, index) => {
+      rowData[header] = row[index];
+    });
+
+    if (rowData["Preferred Instructor"] !== "") {
+      continue;
+    }
+
+    // Start each opportunity in a new table
+    details.push('<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #ddd;font-size:13px">');
+
+    // Add each piece of data as a table row
+    details.push(`
+     
+ <tr style="background-color: #f7f7f7">
+  <td style="width:160px;padding: 8px; color: #288140; background-color: #f0f0f0; vertical-align: middle; display: flex; align-items: center;border-left:1px;border-top:1px;">
+    <img src="https://pbs.twimg.com/profile_images/1019877114894413824/GBCFKbbN_400x400.jpg" 
+         style="height:40px; width:40px; margin-right:5px; margin-left:-3px; border-radius:20px; vertical-align: middle;">
+    <span style="line-height: 40px; vertical-align: middle;font-weight:400">Lesson Group</span>
+  </td>
+  <td style="padding: 8px;width:100%;font-weight:600;">${rowData["Company Name"]}</td>
+</tr>
+
+
+    `);
+
+   // Format the address as a clickable Google Maps link
+if (rowData["Address"] !== "") {
+  const addressLink = formatAddress(rowData["Address"]);
+  details.push(`
+    <tr>
+      <td style="padding: 8px; color: #288140;">Address</td>
+      <td style="padding: 8px; color: #666; width: auto;">
+        ${rowData["LS"] ? `<span style="display: inline-block; padding: 4px 8px; border: 1px solid #288140; border-radius: 12px; color: #288140; font-size: 0.85em; margin-bottom: 3px;">${rowData["LS"]} Learning Studio</span><br>` : ""}
+        ${addressLink}
+      </td>
+    </tr>
+  `);
+}
+
+    details.push(`
+      <tr style="background-color: #f7f7f7;">
+        <td style="padding: 8px; color: #288140;">Station</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Nearest Station"]}</td>
+      </tr>
+    `);
+
+    details.push(`
+      <tr>
+        <td style="padding: 8px; color: #288140;">Lesson day</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Regular lesson day(s)"]}</td>
+      </tr>
+    `);
+
+    details.push(`
+      <tr style="background-color: #f7f7f7;">
+        <td style="padding: 8px; color: #288140;">Lesson time</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Time"]}</td>
+      </tr>
+    `);
+
+    if (rowData["Start date"] !== "") {
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140;">Start Date</td>
+          <td style="padding: 8px; color: #666;width:auto">${formatDate(rowData["Start date"])}</td>
+        </tr>
+      `);
+    } else {
+      const options = [rowData["Start Option 1"], rowData["Start Option 2"], rowData["Start Option 3"]]
+        .filter(option => option !== "")
+        .join(" ");
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140;">Start Date</td>
+          <td style="padding: 8px; color: #666;width:auto">Options ${options}</td>
+        </tr>
+      `);
+    }
+
+    // Format the lesson rate using the helper function
+    details.push(`
+      <tr style="background-color: #f7f7f7;">
+        <td style="padding: 8px; color: #288140;">Per lesson rate</td>
+        <td style="padding: 8px; color: #666;width:auto">${formatCurrency(rowData["Lesson rate"])}</td>
+      </tr>
+    `);
+
+    details.push(`
+      <tr>
+        <td style="padding: 8px; color: #288140;"># of Lessons</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Number of lessons"]}</td>
+      </tr>
+    `);
+
+    details.push(`
+      <tr style="background-color: #f7f7f7;">
+        <td style="padding: 8px; color: #288140;">Lesson Format(s)</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Lesson Formats"]}</td>
+      </tr>
+    `);
+
+    if (rowData["Lesson Formats"].includes("custom")) {
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140;">Curriculum</td>
+          <td style="padding: 8px; color: #666;width:auto">${rowData["Curriculum Details"]}</td>
+        </tr>
+      `);
+    }
+
+    if (rowData["Skip1"] !== "") {
+      const skipDates = [rowData["Skip1"], rowData["Skip2"], rowData["Skip3"], rowData["Skip4"], rowData["Skip5"]]
+        .filter(date => date !== "")
+        .map(date => formatDate(date))
+        .join(", ");
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140; background-color:#FDFBE6">⚠️ Skip Dates</td>
+          <td style="padding: 8px; color: #666; background-color:#FDFBE6;width:auto">${skipDates}</td>
+        </tr>
+      `);
+    }
+    
+    if (rowData["Irregular1"] !== "") {
+      const irregularDates = [rowData["Irregular1"], rowData["Irregular2"], rowData["Irregular3"], rowData["Irregular4"], rowData["Irregular5"]]
+        .filter(date => date !== "")
+        .map(date => formatDate(date))
+        .join(", ");
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140; background-color:#FDFBE6">⚠️ Irregular Dates</td>
+          <td style="padding: 8px; color: #666; background-color:#FDFBE6;width:auto">${irregularDates}</td>
+        </tr>
+      `);
+    }
+    
+    if (rowData["Special1"] !== "") {
+      const specialFormats = [rowData["Special1"], rowData["Special2"], rowData["Special3"], rowData["Special4"], rowData["Special5"]]
+        .filter(format => format !== "")
+        .map(format => formatDate(format))
+        .join(", ");
+      details.push(`
+        <tr>
+          <td style="padding: 8px; color: #288140; background-color:#FDFBE6">⚠️ Special Format Dates</td>
+          <td style="padding: 8px; color: #666; background-color:#FDFBE6;width:auto">${specialFormats}</td>
+        </tr>
+      `);
+    }
+
+    let lessonType = `
+      <tr style="background-color: #f7f7f7;">
+        <td style="padding: 8px; color: #288140;">Lesson Type(s)</td>
+        <td style="padding: 8px; color: #666;width:auto">${rowData["Delivery"]}</td>
+      </tr>
+    `;
+    if (rowData["Delivery"] === "Online LS") {
+      lessonType += `
+        <tr>
+          <td style="background-color:#fff1f1; padding: 8px; color: #b3261e;">Booth</td>
+          <td style="background-color:#fff1f1; padding: 8px; color: #b3261e; font-weight:400;width:auto">${rowData["Booth"]}</td>
+        </tr>
+      `;
+    }
+    details.push(lessonType);
+
+        // Close the table for the current opportunity
+    details.push('</table><br><br>');  // Add line breaks after each table
+
+    // Add the details of the current opportunity to the email body
+    emailBody.push(details.join(""));
+  }
+
+  const emailRecipient = "recipient@example.com";
+  
+  // Format the current date
+  const today = new Date();
+  const formattedDate = formatDate(today);
+
+  const emailSubject = `*** Gaba *** New Services - ${formattedDate} ***`;
+  // Construct the email body with "Dear Instructor" as the greeting
+  
+  const emailTop = `
+    <p>Dear Instructor,</p>
+
+    <p>We hereby offer the following contracts.</p>
+
+    <p>Please follow these instructions to place a bid:</p>
+
+    <ul>
+      <li>Confirm that you don't have overlapping lessons in the LS or with other COS lessons for the date/time of the contracts you bid on.</li>
+      <li>Reply directly to this email and copy-paste the full contract information.</li>
+      <li>Include the dates you require for covers on these lessons.</li>
+    </ul>
+
+    <p>Could we ask you to submit your bids by 09:00 on the next business day, please? We will confirm the contract offer by 12:00 on the next business day.</p>
+
+    <p>Thank you!</p><br><br>
+  `;
+
+  const emailContent = emailBody.join("");
+
+  GmailApp.createDraft(emailRecipient, emailSubject, '', {
+    htmlBody: emailTop + emailContent  // Send as HTML content
+  });
+  Logger.log(emailContent);
+}
+
