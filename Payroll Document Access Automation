@@ -1,0 +1,78 @@
+function grantPermissionsBasedOnID() {
+  var spreadsheetId = "1yGF2-xuHZ1aShIPEQ7qMIyS0DfXUPiAfuxrw9tY2pRw"; // Your Spreadsheet ID
+  var sheetName = "Sheet1"; // Name of the sheet containing the data
+
+  var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  if (!spreadsheet) {
+    Logger.log("Could not find the spreadsheet.");
+    return;
+  }
+
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    Logger.log("Could not find the sheet named '" + sheetName + "'");
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues(); // Get all the data from the sheet
+
+  var folderName = "Payslips"; // Name of the folder containing the documents
+  var folder = DriveApp.getFoldersByName(folderName).next(); // Get the folder by name
+  var files = folder.getFiles(); // Get all files in the folder
+
+  // Create a map to link Nova IDs to emails
+  var userIdEmailMap = {};
+  for (var i = 1; i < data.length; i++) { // Start at 1 to skip headers
+    var userId = data[i][0]; // Nova ID (first column)
+    var email = data[i][1]; // Email (second column)
+    if (userId && email) {
+      userIdEmailMap[userId] = email;
+    }
+  }
+
+  while (files.hasNext()) {
+    var file = files.next();
+    var title = file.getName(); // Get the document title
+
+    // Iterate through the user ID-email map and check if the ID is in the title
+    for (var userId in userIdEmailMap) {
+      if (title.indexOf(userId) !== -1) {
+        var email = userIdEmailMap[userId];
+
+        // Check if the user already has view or edit access
+        var alreadyHasAccess = false;
+
+        // Get the current viewers and editors of the file
+        var viewers = file.getViewers();
+        var editors = file.getEditors();
+
+        // Check if the email is in the list of viewers or editors
+        for (var j = 0; j < viewers.length; j++) {
+          if (viewers[j].getEmail() === email) {
+            alreadyHasAccess = true;
+            break;
+          }
+        }
+
+        if (!alreadyHasAccess) {
+          for (var k = 0; k < editors.length; k++) {
+            if (editors[k].getEmail() === email) {
+              alreadyHasAccess = true;
+              break;
+            }
+          }
+        }
+
+        // Grant viewing permission only if the user doesn't already have access
+        if (!alreadyHasAccess) {
+          try {
+            file.addViewer(email);
+            Logger.log('Granted viewing permission to ' + email + ' for file: ' + title);
+          } catch (e) {
+            Logger.log('Failed to grant permission: ' + e.message);
+          }
+        }
+      }
+    }
+  }
+}
