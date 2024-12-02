@@ -1,0 +1,170 @@
+function processInstructorResponses() {
+  const originalSender = "offsitelessons@gaba.co.jp";
+  const recipient = "dhouston.corp@gmail.com";
+  const subjectQuery = 'subject:"New Services"';
+  const labelName = "Processed";
+  const excludedEmails = [
+    "offsitelessons@gaba.co.jp",
+    "belee.corp@gmail.com",
+    "blee@gaba.co.jp",
+    "jhilborn.corp@gmail.com",
+    "jhilborn@gaba.co.jp",
+    "dhouston@gaba.co.jp",
+    "dhouston.corp@gmail.com"
+  ];
+
+  // Calculate the date 4 days ago
+  const fourDaysAgo = new Date();
+  fourDaysAgo.setDate(fourDaysAgo.getDate() - 5);
+  const formattedDate = Utilities.formatDate(fourDaysAgo, Session.getScriptTimeZone(), "yyyy/MM/dd");
+
+  // Modify the search query to only include emails from the last 4 days
+  const query = `${subjectQuery} after:${formattedDate}`;
+
+  let label = GmailApp.getUserLabelByName(labelName);
+  if (!label) {
+    label = GmailApp.createLabel(labelName);
+  }
+
+  const threads = GmailApp.search(query);
+  Logger.log(`Number of threads found: ${threads.length}`);
+
+  if (threads.length === 0) {
+    Logger.log("No matching threads found.");
+    return;
+  }
+
+  threads.sort((a, b) => {
+    const dateA = a.getLastMessageDate();
+    const dateB = b.getLastMessageDate();
+    return dateB - dateA;
+  });
+
+  const latestThread = threads[0];
+  const messages = latestThread.getMessages();
+  const originalMessage = messages.find(msg => msg.getFrom().includes(originalSender));
+
+  if (!originalMessage) {
+    Logger.log("Original message not found in thread, skipping.");
+    return;
+  }
+
+  const companyResponses = {};
+
+  messages.forEach(message => {
+    if (message.getFrom().includes(originalSender)) {
+      return;
+    }
+
+    const senderEmail = message.getFrom().match(/<([^>]+)>/)?.[1] || message.getFrom();
+    const senderNameMatch = message.getFrom().match(/^(.*)\s(.*)$/);
+    Logger.log(`Extracted sender name: ${senderNameMatch ? senderNameMatch[1] : "Not Found"}`);
+
+    const senderName = senderNameMatch ? senderNameMatch[1].trim() : "";
+    const messageBody = message.getPlainBody();
+
+    if (excludedEmails.includes(senderEmail)) {
+      Logger.log(`Excluding response from: ${senderEmail}`);
+      return;
+    }
+
+    if (senderEmail && messageBody) {
+      const details = extractContractDetails(messageBody);
+
+      if (!companyResponses[details.company]) {
+        companyResponses[details.company] = [];
+      }
+
+      const cleanSenderName = senderName.replace(/"/g, "").trim();
+      const displayName = cleanSenderName || "Instructor";
+
+      let boothText = details.booth && details.booth !== "Unknown" ? `Booth: ${details.booth}` : "";
+
+      const emailBodyPlainText =
+`Hello ${cleanSenderName || "Instructor"}, 
+
+Thank you for your bid. We would like to offer you the following contract:
+
+Company: ${details.company}
+Address: ${details.address}
+Station: ${details.station}
+Lesson day: ${details.lessonDay}
+Lesson time: ${details.lessonTime}
+Start Date: ${details.startDate}
+Per lesson rate: ${details.rate}
+# of lessons: ${details.numLessons}
+${boothText}
+
+Please respond to this email by midnight today to confirm you are still available to provide the stated Contract Services.
+
+These lessons are not in the system yet and therefore won’t appear in your schedule until entered. Please take this into consideration when scheduling other lessons or external commitments. Additionally, should you require cover for these lessons, please bear in mind that the deadline for cover lesson requests is the 10th of the previous month.`;
+
+      companyResponses[details.company].push({
+        name: cleanSenderName || "Instructor",
+        email: senderEmail,
+        body: emailBodyPlainText
+      });
+
+      Logger.log(`Processed response from ${senderEmail}`);
+    }
+  });
+
+  latestThread.addLabel(label);
+
+  let responseBody = "<p>Responses from instructors for the offered contract services:</p><br>";
+
+  Object.keys(companyResponses).forEach(company => {
+    responseBody += `<p><strong>Company: ${company}</strong></p>`;
+    companyResponses[company].forEach(instructor => {
+      const emailSubject = `*** Gaba *** Bid Confirmation at ${company} ***`;
+
+      responseBody += `<p>
+        <a href="mailto:${instructor.email}?subject=${encodeURIComponent(emailSubject)}&cc=offsitelessons@gaba.co.jp&body=${encodeURIComponent(instructor.body)}" 
+           style="color: blue; text-decoration: underline;">
+          Choose ${instructor.name === "Instructor" ? instructor.email : instructor.name}
+        </a>
+      </p>`;
+    });
+    responseBody += "<hr>";
+  });
+
+  originalMessage.reply(responseBody, {
+    htmlBody: responseBody
+  });
+}
+
+// Function to extract contract details from the email body
+function extractContractDetails(messageBody) {
+  const details = {};
+
+  const companyMatch = messageBody.match(/Company:\s*(.*)/);
+  if (companyMatch) details.company = companyMatch[1].trim();
+
+  const addressMatch = messageBody.match(/Address:\s*(.*)/);
+  if (addressMatch) details.address = addressMatch[1].trim();
+
+  const stationMatch = messageBody.match(/Station:\s*(.*)/);
+  if (stationMatch) details.station = stationMatch[1].trim();
+
+  const lessonDayMatch = messageBody.match(/Lesson day:\s*(.*)/);
+  if (lessonDayMatch) details.lessonDay = lessonDayMatch[1].trim();
+
+  const lessonTimeMatch = messageBody.match(/Lesson time:\s*(.*)/);
+  if (lessonTimeMatch) details.lessonTime = lessonTimeMatch[1].trim();
+
+  const startDateMatch = messageBody.match(/Start Date:\s*(.*)/);
+  if (startDateMatch) details.startDate = startDateMatch[1].trim();
+
+  const rateMatch = messageBody.match(/Per lesson rate:\s*(.*)/);
+  if (rateMatch) details.rate = rateMatch[1].trim();
+
+  const numLessonsMatch = messageBody.match(/# of lessons:\s*(.*)/);
+  if (numLessonsMatch) details.numLessons = numLessonsMatch[1].trim();
+
+  const boothMatch = messageBody.match(/Booth:\s*(.*)/);
+  if (boothMatch) details.booth = boothMatch[1].trim();
+
+  return details;
+}
+
+Logger.log("Reply sent with compiled responses.");
