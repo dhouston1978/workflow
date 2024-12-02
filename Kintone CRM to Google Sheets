@@ -1,0 +1,199 @@
+function importKintoneData() {
+  var domain = "https://novahd.cybozu.com";
+  var appId = "998";
+  var apiToken = "94jT3fZoO5HB0aKNNllBjOQQi5g70tzR5xzCXc3x";
+  var url = domain + "/k/v1/records.json?app=" + appId;
+  Logger.log("Kintone API URL: " + url);
+
+  var params = {
+    "method": "get",
+    "headers": {
+      "X-Cybozu-API-Token": apiToken
+    },
+    "muteHttpExceptions": true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(url, params);
+    if (response.getResponseCode() !== 200) {
+      Logger.log("Error fetching data: HTTP status code " + response.getResponseCode());
+      Logger.log("Response headers: " + JSON.stringify(response.getHeaders()));
+      Logger.log("Response content: " + response.getContentText());
+      return;
+    }
+
+    var data = JSON.parse(response.getContentText()).records;
+
+    var sheetId = "1BT5dLq2-lWbz50EKBAElK61C6BpqOuVTskQEJ7FzhEc";
+    var spreadsheet = SpreadsheetApp.openById(sheetId);
+    var sheet = spreadsheet.getSheetByName("NWT");
+
+    // Ensure that headers are present in row 1
+    var headers = [
+      "Demand Request", "Sales team", "Demand request received date", "Company Name", "Start date", "LS", "Instructor(s)",
+      "Bid Confirmed Date", "Cover Instructor", "Regular lesson day(s)", "Time", "Number of lessons", "Lesson rate",
+      "Notes", "Address", "Nearest Station", "Booth", "Still needs action", "Irregular", "FL Needed", "Instructor informed",
+      "Lesson Group", "Delivery", "Start Option 1", "Start Option 2", "Start Option 3", "Start Time", "End Time", "Skip1",
+      "Skip2", "Skip3", "Skip4", "Skip5", "Irregular1", "Irregular2", "Irregular3", "Irregular4", "Irregular5",
+      "Special1", "Special2", "Special3", "Special4", "Special5", "Preferred Instructor", "Instructor Rules",
+      "Technology", "Other Platform Name", "Platform Host", "Number of Students", "Lesson Formats", "Curriculum Details"
+    ];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+    // Find the first empty row greater than 1
+    var firstEmptyRow = sheet.getLastRow() + 1;
+    if (firstEmptyRow === 2) {
+      firstEmptyRow = 2;  // Skip row 1, start from row 2 if row 1 is already filled
+    }
+
+    // Utility function to extract multiple values as a comma-separated list
+    function getMultiValue(field) {
+      return field && field.value ? (Array.isArray(field.value) ? field.value.join(", ") : field.value) : "";
+    }
+
+    // Function to create a row from Kintone record fields
+    function createRow(record, suffix = 1, currentRow) {
+      var startValue = getMultiValue(record[`Start_${suffix}`]);
+      if (!startValue) {
+        // Skip row if Start_# field is missing
+        return currentRow;
+      }
+
+      var lsValue = getMultiValue(record[`LS_${suffix}`]); // Get LS value once
+      var deliveryValue = getMultiValue(record[`Delivery_${suffix}`]);
+
+      // Determine if LS_# field should be included based on Delivery
+      var lsFieldVisible = (deliveryValue === "Online LS" || deliveryValue === "Remote");
+
+// Helper function to get conditional Skip values based on SkipDays
+const getConditionalSkipValues = (suffix, skipDays) => {
+    const skipValues = [];
+    skipValues.push(skipDays >= 1 ? getMultiValue(record[`Skip1_${suffix}`]) : "");
+    skipValues.push(skipDays >= 2 ? getMultiValue(record[`Skip2_${suffix}`]) : "");
+    skipValues.push(skipDays >= 3 ? getMultiValue(record[`Skip3_${suffix}`]) : "");
+    skipValues.push(skipDays >= 4 ? getMultiValue(record[`Skip4_${suffix}`]) : "");
+    skipValues.push(skipDays >= 5 ? getMultiValue(record[`Skip5_${suffix}`]) : "");
+    return skipValues;
+};
+
+// Retrieve SkipDays value
+const skipDaysValue = getMultiValue(record[`SkipDays_${suffix}`]);
+
+// Helper function to get conditional Irregular values based on IrregularDays
+const getConditionalIrregularValues = (suffix, irregularDays) => {
+    const irregularValues = [];
+    irregularValues.push(irregularDays >= 1 ? getMultiValue(record[`Irregular1_${suffix}`]) : "");
+    irregularValues.push(irregularDays >= 2 ? getMultiValue(record[`Irregular2_${suffix}`]) : "");
+    irregularValues.push(irregularDays >= 3 ? getMultiValue(record[`Irregular3_${suffix}`]) : "");
+    irregularValues.push(irregularDays >= 4 ? getMultiValue(record[`Irregular4_${suffix}`]) : "");
+    irregularValues.push(irregularDays >= 5 ? getMultiValue(record[`Irregular5_${suffix}`]) : "");
+    return irregularValues;
+};
+
+// Retrieve IrregularDays value
+const irregularDaysValue = getMultiValue(record[`IrregularDays_${suffix}`]);
+
+// Helper function to get conditional SpecialDays values based on SpecialDays
+const getConditionalSpecialValues = (suffix, specialDays) => {
+    const specialValues = [];
+    specialValues.push(specialDays >= 1 ? getMultiValue(record[`SpecialDays1_${suffix}`]) : "");
+    specialValues.push(specialDays >= 2 ? getMultiValue(record[`SpecialDays2_${suffix}`]) : "");
+    specialValues.push(specialDays >= 3 ? getMultiValue(record[`SpecialDays3_${suffix}`]) : "");
+    specialValues.push(specialDays >= 4 ? getMultiValue(record[`SpecialDays4_${suffix}`]) : "");
+    specialValues.push(specialDays >= 5 ? getMultiValue(record[`SpecialDays5_${suffix}`]) : "");
+    return specialValues;
+};
+
+// Retrieve SpecialDays value
+const specialDaysValue = getMultiValue(record[`SpecialDays_${suffix}`]);
+
+// Helper function to get conditional FLOption values based on FLOptionNumber
+const getConditionalFLOptionValues = (suffix, flOptionNumber) => {
+    const flOptionValues = [];
+    flOptionValues.push(flOptionNumber >= 1 ? getMultiValue(record[`FLOption1_${suffix}`]) : "");
+    flOptionValues.push(flOptionNumber >= 2 ? getMultiValue(record[`FLOption2_${suffix}`]) : "");
+    flOptionValues.push(flOptionNumber >= 3 ? getMultiValue(record[`FLOption3_${suffix}`]) : "");
+    return flOptionValues;
+};
+
+// Retrieve FLOptionNumber value
+const flOptionNumberValue = parseInt(getMultiValue(record[`FLOptionNumber_${suffix}`])) || 0;
+
+
+      var rowData = [
+        `${domain}/k/${appId}/show#record=${record.$id.value}`,
+        getMultiValue(record["Sales_team"] || record["Tantou"]) !== "" 
+            ? `=GOOGLETRANSLATE("${getMultiValue(record["Sales_team"] || record["Tantou"])}", "JA", "EN")` 
+            : "",  // Return an empty string if the value is empty
+        getMultiValue(record["Demand_Request_Received_Date"]),
+                getMultiValue(record[`Company_Name`]) !== "" 
+            ? `=GOOGLETRANSLATE("${getMultiValue(record[`Company_Name`])}", "JA", "EN") & " " & "${getMultiValue(record[`Group_${suffix}`])}"`
+            : "",  // Return an empty string if the value is empty
+        getMultiValue(record[`FLFixed_${suffix}`]),
+        getMultiValue(record[`LS_${suffix}`]),
+        getMultiValue(record["Instructor"]),
+        getMultiValue(record["Bid_Confirmed_Date"]),
+        getMultiValue(record["Cover_Instructor"]),
+        getMultiValue(record[`Days_${suffix}`]),
+          `=(TEXT(AA${currentRow}, "HH:mm")) & " to " & (TEXT(AB${currentRow}, "HH:mm"))`,
+        getMultiValue(record[`LessonsQTY_${suffix}`]),
+        // Insert the dynamic formula into the Lesson Rate column
+            `=IF((AB${currentRow} - AA${currentRow}) < (1/24), 4000, IF(AA${currentRow} < (10/24), 5000, IF(AA${currentRow} > (18/24), 5000, 4000)) * (AB${currentRow} - AA${currentRow}) / (1/24))`, 
+        getMultiValue(record["CaptureAdditionalInfo"]),
+        getMultiValue(record[`Address_${suffix}`]) !== "" 
+            ? `=GOOGLETRANSLATE("${getMultiValue(record[`Address_${suffix}`])}", "JA", "EN")` 
+            : "",  // Return an empty string if the value is empty
+        getMultiValue(record[`Station_${suffix}`]) !== "" 
+            ? `=GOOGLETRANSLATE("${getMultiValue(record[`Station_${suffix}`])}", "JA", "EN")` 
+            : "",  // Return an empty string if the value is empty
+        lsFieldVisible ? getMultiValue(record[`LSBooth_${suffix}`]) : "",  // Only show LSBooth if LS field is visible
+        getMultiValue(record[`Still_Needs_Action_${suffix}`]),
+              "",  // Irregular field will now be empty
+        getMultiValue(record[`FL_Needed_${suffix}`]),
+        getMultiValue(record[`Instructor_Informed_${suffix}`]),
+        getMultiValue(record[`Group_${suffix}`]),
+        getMultiValue(record[`Delivery_${suffix}`]),
+        ...getConditionalFLOptionValues(suffix, flOptionNumberValue),  // Add conditional FLOption values
+        getMultiValue(record[`Start_${suffix}`]),
+        getMultiValue(record[`End_${suffix}`]),
+        ...getConditionalSkipValues(suffix, skipDaysValue),  // Add conditional Skip values
+        ...getConditionalIrregularValues(suffix, irregularDaysValue),  // Add conditional Irregular values
+        ...getConditionalSpecialValues(suffix, specialDaysValue),  // Add conditional SpecialDays values
+        getMultiValue(record[`PreferName_${suffix}`]),
+        getMultiValue(record["Instruction"]),
+        getMultiValue(record[`Technology_${suffix}`]),
+        getMultiValue(record[`OtherPlatform_${suffix}`]),
+        getMultiValue(record[`Host_${suffix}`]),
+        getMultiValue(record[`StudentEstimate_${suffix}`]),
+        getMultiValue(record[`Curriculum_${suffix}`]),
+        getMultiValue(record[`CurriculumDetails_${suffix}`])
+      ];
+
+      // Check if currentRow is a valid number before using getRange
+      if (currentRow && currentRow > 0) {
+        sheet.getRange(currentRow, 1, 1, rowData.length).setValues([rowData]);
+
+        // Apply Yen currency format to the Lesson Rate column (Column 13)
+        sheet.getRange(currentRow, 13).setNumberFormat('¥#,##0');
+      }
+
+      // Return the next row for the subsequent insertion
+      return currentRow + 1;
+    }
+
+    // Loop through Kintone data and create rows
+    var rows = [];
+    var currentRow = firstEmptyRow;  // Start from the first empty row
+
+    var maxSuffix = 5;  // Adjust the number of suffixes as needed
+
+    data.forEach(function(record) {
+      for (var suffix = 1; suffix <= maxSuffix; suffix++) {
+        currentRow = createRow(record, suffix, currentRow);  // Update currentRow after each row insertion
+      }
+    });
+
+  } catch (error) {
+    Logger.log("Error: " + error.message);
+  }
+}
