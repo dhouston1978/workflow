@@ -1,0 +1,51 @@
+function onEdit(e) {
+  const sheet = e.source.getSheetByName('フォームの回答 1');  // Correct sheet name
+  const range = e.range;  // The range of the edited cell
+  const editedValue = e.value;  // The new value of the edited cell
+  const row = range.getRow();  // Row of the edited cell
+
+  // Ensure we're working with the correct column (Column AB = 28)
+  if (range.getColumn() == 28) {
+    Logger.log("Edited cell in AB, Row: " + row + ", Value: " + editedValue);  // Debugging log
+    
+    // Handle "Notify Tantou"
+    if (editedValue == "Notify Tantou") {
+      const contractName = `${sheet.getRange(row, 8).getValue()} ${sheet.getRange(row, 9).getValue()}`;  // Columns H and I
+      const tantou = sheet.getRange(row, 4).getValue();          // Column D (Salesperson/Recipient Name)
+      const recipientEmail = sheet.getRange(row, 5).getValue();  // Column E (Recipient Email)
+
+      // Debugging log
+      Logger.log("Contract Name: " + contractName);
+      Logger.log("Salesperson: " + tantou);
+      Logger.log("Email: " + recipientEmail);
+
+      // Ensure recipient email is valid
+      if (recipientEmail && recipientEmail !== "") {
+        const subject = `*** 契約 ${contractName} 完了通知`;
+
+        // HTML email body with embedded link
+        const body = ` 
+          <p>Dear ${tantou},</p>
+          <p>このメッセージは、契約 <strong>${contractName}</strong> が完了したことを通知するものです。</p>
+          <p>講師の詳細は<a href="https://docs.google.com/spreadsheets/d/1Qwhnro1slB2HXcy3LCHEou_re_WRi5rJW3AE2fe__aM/edit?gid=2060794837#gid=2060794837">こちら</a>をご覧ください。</p>
+          <p>よろしくお願いします。</p>
+          <p>NOVA Offsite Team</p>`;
+
+        // Send the email with CC
+        MailApp.sendEmail({
+          to: recipientEmail,
+          cc: "offsitelessons@gaba.co.jp",  // CC recipient
+          subject: subject,
+          htmlBody: body,  // Send as HTML email
+          from: "offsitelessons@gaba.co.jp"
+        });
+
+        // Set AC column (29) to "Notified"
+        sheet.getRange(row, 29).setValue("Notified");
+        Logger.log("Updated AC to 'Notified' for row " + row);
+      } else {
+        Logger.log("No recipient email found.");
+      }
+    }
+  }
+}
